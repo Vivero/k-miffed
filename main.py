@@ -1,6 +1,6 @@
 from config import KRPC_IP_ADDRESS, KRPC_RPC_PORT, KRPC_STREAM_PORT, KBALL_MMAP_INTERFACE_FILE
 from ksp_interface import KspInterface
-from kockpit_app import KockpitApp
+from app import KmiffedApp
 from mmap_interface import MemMapInterface
 
 #
@@ -22,7 +22,7 @@ mem_map.init_mapping()
 #
 # Entry Point Routine
 #
-app = KockpitApp(krpc, mem_map)
+app = KmiffedApp(krpc, mem_map)
 app.run()
 
 krpc.deinit_connection()

@@ -2,10 +2,16 @@ from ksp_interface import VesselAttitude
 import mmap, os, struct
 
 class MemMapInterface:
+    #
+    # Constants
+    #
     __VESSEL_ATTITUDE_STRUCT_FMT = "<IIfff" # '<' denotes little-endian byte order
     __VESSEL_ATTITUDE_STRUCT_SIZE = struct.calcsize(__VESSEL_ATTITUDE_STRUCT_FMT)
     __VESSEL_ATTITUDE_STRUCT_MAGIC = 0x00CD0186
 
+    #
+    # Constructor
+    #
     def __init__(self, mmap_filename):
         self.mmap_filename = mmap_filename
         self.vessel_attitude_struct = {
@@ -16,6 +22,9 @@ class MemMapInterface:
             'fRoll': 0,
         }
 
+    #
+    # Public Methods
+    #
     def init_mapping(self):
         # Check if the file exists
         if os.path.exists(self.mmap_filename):

@@ -8,7 +8,7 @@ from textual.containers import Container, Vertical
 from textual.message import Message
 from textual.widgets import Footer, Header, Input, Label, Static, TextLog
 
-class KockpitApp(App):
+class KmiffedApp(App):
     #
     # Textual Properties
     #
@@ -133,16 +133,16 @@ class KockpitApp(App):
     #
     # Message Handlers
     #
-    def on_kockpit_app_set_krpc_status_msg(self, message: SetKrpcStatusMsg) -> None:
+    def on_kmiffed_app_set_krpc_status_msg(self, message: SetKrpcStatusMsg) -> None:
         self.sub_title = message.status_str
 
-    def on_kockpit_app_set_orbital_parameters_msg(self, message: SetOrbitalParametersMsg) -> None:
+    def on_kmiffed_app_set_orbital_parameters_msg(self, message: SetOrbitalParametersMsg) -> None:
         label = self.query_one("#field-value-orbital-period", Label)
-        label.update(KockpitApp._format_time(message.orbital_period, False))
+        label.update(KmiffedApp._format_time(message.orbital_period, False))
         label = self.query_one("#field-value-orbital-tta", Label)
-        label.update(KockpitApp._format_time(message.time_to_apoapsis, True))
+        label.update(KmiffedApp._format_time(message.time_to_apoapsis, True))
         label = self.query_one("#field-value-orbital-ttp", Label)
-        label.update(KockpitApp._format_time(message.time_to_periapsis, True))
+        label.update(KmiffedApp._format_time(message.time_to_periapsis, True))
 
     #
     # Private Methods

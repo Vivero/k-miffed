@@ -2,12 +2,21 @@ import krpc
 from datetime import datetime, timedelta
 from collections import namedtuple
 
+#
+# Types
+#
 VesselAttitude = namedtuple("VesselAttitude", ["bIsDataValid", "fHeading", "fPitch", "fRoll"])
 VesselOrbitalParameters = namedtuple("VesselOrbitalParameters", ["bIsDataValid", "fPeriod", "fTimeToApoapsis", "fTimeToPeriapsis"])
 
 class KspInterface:
+    #
+    # Constants
+    #
     MAX_RETRY_INTERVAL_MS = 5000
 
+    #
+    # Constructor
+    #
     def __init__(self, ip_address, rpc_port, stream_port):
         self.ip_address = ip_address
         self.rpc_port = rpc_port
@@ -18,6 +27,9 @@ class KspInterface:
         self.last_data_setup_time = datetime.now()
         self.retry_interval_ms = 100
 
+    #
+    # Public Methods
+    #
     def init_connection(self) -> bool:
         if self.is_connected:
             return True
@@ -60,7 +72,7 @@ class KspInterface:
         if time_since_last_connect > timedelta(milliseconds=self.retry_interval_ms):
             is_success = self.init_connection()
             if not is_success:
-                self.increase_retry_interval()
+                self.__increase_retry_interval()
 
     def setup_data_streams_if_needed(self) -> None:
         if self.is_data_streaming or (not self.is_connected):
@@ -98,12 +110,7 @@ class KspInterface:
             print("Exception message : ", str(e))
 
             self.is_data_streaming = False
-            self.increase_retry_interval()
-
-    def increase_retry_interval(self) -> None:
-        self.retry_interval_ms = self.retry_interval_ms * 2
-        if self.retry_interval_ms > self.MAX_RETRY_INTERVAL_MS:
-            self.retry_interval_ms = self.MAX_RETRY_INTERVAL_MS
+            self.__increase_retry_interval()
 
     def get_krpc_status(self) -> str:
         krpc_status = "no connection"
@@ -153,6 +160,14 @@ class KspInterface:
             time_to_apoapsis = self.stream_time_to_apoapsis()
             time_to_periapsis = self.stream_time_to_periapsis()
         return VesselOrbitalParameters(is_valid, orbital_period, time_to_apoapsis, time_to_periapsis)
+
+    #
+    # Private Methods
+    #
+    def __increase_retry_interval(self) -> None:
+        self.retry_interval_ms = self.retry_interval_ms * 2
+        if self.retry_interval_ms > self.MAX_RETRY_INTERVAL_MS:
+            self.retry_interval_ms = self.MAX_RETRY_INTERVAL_MS
 
     def __execute_debugging_tools(self):
         parts_to_log = []
