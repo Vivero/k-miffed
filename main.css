@@ -1,0 +1,42 @@
+#main-container {
+    padding: 1 1 0 1;
+    layers: main overlay;
+    layout: grid;
+    grid-size: 2 2;
+}
+
+#overlay-container {
+    layer: overlay;
+    dock: right;
+    height: 100%;
+    width: 50;
+    border: round yellow;
+    display: none;
+    padding-left: 1;
+}
+
+.panel {
+    height: 100%;
+    border: panel green;
+    border-title-align: center;
+    margin-bottom: 1;
+    padding: 1 2 1 2;
+}
+
+.panel-focused {
+    border: panel orange;
+}
+
+#panel-orbital {
+    layout: grid;
+    grid-size: 2;
+    grid-rows: 1;
+}
+
+.table-field-name {
+    height: 1;
+}
+
+.table-field-value {
+    height: 1;
+}
