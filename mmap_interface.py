@@ -1,4 +1,4 @@
-from ksp_interface import VesselAttitude
+from ksp_types import VesselAttitude
 import mmap, os, struct
 
 class MemMapInterface:

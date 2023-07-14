@@ -27,9 +27,19 @@
     border: panel orange;
 }
 
-#panel-orbital {
+.panel-format-table {
     layout: grid;
     grid-size: 2;
+    grid-rows: 1;
+}
+
+#panel-supplies {
+    grid-columns: 1fr 2fr;
+}
+
+#panel-program {
+    layout: grid;
+    grid-size: 1;
     grid-rows: 1;
 }
 
@@ -39,4 +49,14 @@
 
 .table-field-value {
     height: 1;
+}
+
+.item-label-selected {
+    background: $secondary-background;
+    color: $secondary;
+}
+
+.item-label-hovered {
+    background: $primary-background-lighten-3;
+    color: $primary;
 }

@@ -1,12 +1,6 @@
-import krpc
 from datetime import datetime, timedelta
-from collections import namedtuple
-
-#
-# Types
-#
-VesselAttitude = namedtuple("VesselAttitude", ["bIsDataValid", "fHeading", "fPitch", "fRoll"])
-VesselOrbitalParameters = namedtuple("VesselOrbitalParameters", ["bIsDataValid", "fPeriod", "fTimeToApoapsis", "fTimeToPeriapsis"])
+import krpc
+from ksp_types import VesselAttitude, VesselFlightControl, VesselFlightState, VesselOrbitalParameters, VesselResources
 
 class KspInterface:
     #
@@ -77,7 +71,7 @@ class KspInterface:
     def setup_data_streams_if_needed(self) -> None:
         if self.is_data_streaming or (not self.is_connected):
             return
-        
+
         current_timestamp = datetime.now()
         time_since_last_data_setup = current_timestamp - self.last_data_setup_time
         if time_since_last_data_setup < timedelta(milliseconds=self.retry_interval_ms):
@@ -87,19 +81,24 @@ class KspInterface:
             print("Setting up KRPC data streams...")
             self.last_data_setup_time = datetime.now()
 
+            self.gravitational_constant = self.krpc_connection.space_center.g
             vessel = self.krpc_connection.space_center.active_vessel
-            # vessel_orb_refframe = vessel.orbital_reference_frame
-            vessel_srf_refframe = vessel.surface_reference_frame
-            vessel_flight = vessel.flight(vessel_srf_refframe)
-            vessel_orbit = vessel.orbit
+            self.stream_vessel_orbit = self.krpc_connection.add_stream(getattr, vessel, 'orbit')
+            vessel_flight = vessel.flight() # surface reference frame
 
+            # Vessel attitude
             self.stream_heading = self.krpc_connection.add_stream(getattr, vessel_flight, 'heading')
             self.stream_pitch = self.krpc_connection.add_stream(getattr, vessel_flight, 'pitch')
             self.stream_roll = self.krpc_connection.add_stream(getattr, vessel_flight, 'roll')
 
-            self.stream_orbital_period = self.krpc_connection.add_stream(getattr, vessel_orbit, 'period')
-            self.stream_time_to_apoapsis = self.krpc_connection.add_stream(getattr, vessel_orbit, 'time_to_apoapsis')
-            self.stream_time_to_periapsis = self.krpc_connection.add_stream(getattr, vessel_orbit, 'time_to_periapsis')
+            # Vessel flight state
+            self.stream_max_thrust = self.krpc_connection.add_stream(getattr, vessel, 'max_thrust')
+            self.stream_mass = self.krpc_connection.add_stream(getattr, vessel, 'mass')
+
+            # Vessel's orbital parameters
+            # self.stream_orbital_period = self.krpc_connection.add_stream(getattr, vessel.orbit, 'period')
+            # self.stream_time_to_apoapsis = self.krpc_connection.add_stream(getattr, vessel.orbit, 'time_to_apoapsis')
+            # self.stream_time_to_periapsis = self.krpc_connection.add_stream(getattr, vessel.orbit, 'time_to_periapsis')
 
             self.is_data_streaming = True
             self.retry_interval_ms = 100
@@ -143,23 +142,86 @@ class KspInterface:
         pitch = 0
         roll = 0
         if self.is_connected and self.is_data_streaming:
-            is_valid = True
-            heading = self.stream_heading()
-            pitch = self.stream_pitch()
-            roll = self.stream_roll()
+            try:
+                heading = self.stream_heading()
+                pitch = self.stream_pitch()
+                roll = self.stream_roll()
+                is_valid = True
+            except Exception as e:
+                print("Failed to get KRPC vessel attitude")
+                print("Exception type    : ", type(e).__name__)
+                print("Exception message : ", str(e))
+                self.is_data_streaming = False
         return VesselAttitude(is_valid, heading, pitch, roll)
+    
+    def get_vessel_flight_state(self) -> VesselFlightState:
+        data = VesselFlightState(False, 0.0, 0.0, 0.0)
+        if self.is_connected and self.is_data_streaming:
+            try:
+                vessel = self.krpc_connection.space_center.active_vessel
+                vessel_mass = self.stream_mass()
+                vessel_pos = vessel.position(self.stream_vessel_orbit().body.reference_frame)
+                dist_sq = (vessel_pos[0] * vessel_pos[0]) + (vessel_pos[1] * vessel_pos[1]) + (vessel_pos[2] * vessel_pos[2])
+                cbody_gravity = self.gravitational_constant * vessel.orbit.body.mass / dist_sq
+                print("\n\n flight_state: mass={0} dist={1} g={2}".format(vessel_mass, dist_sq, cbody_gravity))
+
+                data.fThrustMax = self.stream_max_thrust()
+                data.fVerticalSpeed = vessel.flight(self.stream_vessel_orbit().body.reference_frame).vertical_speed
+                data.fWeight = cbody_gravity * vessel_mass
+                data.bIsDataValid = True
+            except Exception as e:
+                print("Failed to get KRPC vessel flight state")
+                print("Exception type    : ", type(e).__name__)
+                print("Exception message : ", str(e))
+                self.is_data_streaming = False
+        return data
 
     def get_vessel_orbital_parameters(self) -> VesselOrbitalParameters:
-        is_valid = False
-        orbital_period = 0
-        time_to_apoapsis = 0
-        time_to_periapsis = 0
+        data = VesselOrbitalParameters(False, "", 0.0, 0.0, 0.0, 0.0)
         if self.is_connected and self.is_data_streaming:
-            is_valid = True
-            orbital_period = self.stream_orbital_period()
-            time_to_apoapsis = self.stream_time_to_apoapsis()
-            time_to_periapsis = self.stream_time_to_periapsis()
-        return VesselOrbitalParameters(is_valid, orbital_period, time_to_apoapsis, time_to_periapsis)
+            try:
+                data.sCelestialBodyName = self.stream_vessel_orbit().body.name
+                data.fCelestialBodyMass = self.stream_vessel_orbit().body.mass
+                data.fPeriod = self.stream_vessel_orbit().period
+                data.fTimeToApoapsis = self.stream_vessel_orbit().time_to_apoapsis
+                data.fTimeToPeriapsis = self.stream_vessel_orbit().time_to_periapsis
+                data.bIsDataValid = True
+            except Exception as e:
+                print("Failed to get KRPC vessel orbit")
+                print("Exception type    : ", type(e).__name__)
+                print("Exception message : ", str(e))
+                self.is_data_streaming = False
+        return data
+
+    def get_vessel_resources(self) -> VesselResources:
+        data = VesselResources(False, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        if self.is_connected:
+            try:
+                (data.fWater, data.fWaterMax) = self.get_total_resource("Water")
+                (data.fFood, data.fFoodMax) = self.get_total_resource("Food")
+                (data.fOxygen, data.fOxygenMax) = self.get_total_resource("Oxygen")
+                (data.fAtmo, data.fAtmoMax) = self.get_total_resource("Atmosphere")
+                (data.fWasteAtmo, data.fWasteAtmoMax) = self.get_total_resource("WasteAtmosphere")
+                data.bIsDataValid = True
+            except Exception as e:
+                print("Failed to get KRPC vessel resources")
+                print("Exception type    : ", type(e).__name__)
+                print("Exception message : ", str(e))
+        return data
+
+    def get_total_resource(self, resource_name: str) -> tuple:
+        """ Returns the total amount of resource in the active vessel as a tuple: (amount, max)"""
+        amount = 0
+        max = 0
+        all_resources = self.krpc_connection.space_center.active_vessel.resources.with_resource(resource_name)
+        for r in all_resources:
+            amount += r.amount
+            max += r.max
+        return (amount, max)
+
+    def set_flight_controls(self, control: VesselFlightControl) -> None:
+        if control.bIsInputValid:
+            self.krpc_connection.space_center.active_vessel.control.throttle = control.fThrottle
 
     #
     # Private Methods
