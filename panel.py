@@ -34,3 +34,9 @@ class KMiffedPanel(Container):
 
     def on_panel_key_select(self) -> None:
         pass
+
+    def on_panel_key_decrement(self) -> None:
+        pass
+
+    def on_panel_key_increment(self) -> None:
+        pass

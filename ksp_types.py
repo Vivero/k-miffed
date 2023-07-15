@@ -36,11 +36,22 @@ class VesselResources:
 @dataclass
 class VesselFlightState:
     bIsDataValid: bool
+    iSituation: int
+    fWeight: float
     fThrustMax: float
     fVerticalSpeed: float
-    fWeight: float
+    fForwardSpeed: float
+    fLateralSpeed: float
+    fPitchSpeed: float
+    fPitchTorqueMax: float
+    fPitchMomentOfInertia: float
+    fYawSpeed: float
+    fYawTorqueMax: float
+    fYawMomentOfInertia: float
 
 @dataclass
 class VesselFlightControl:
     bIsInputValid: bool
     fThrottle: float
+    fPitch: float
+    fYaw: float

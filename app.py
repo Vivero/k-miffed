@@ -63,7 +63,7 @@ class KmiffedApp(App):
         self.selected_panel_idx_prev = -1
 
         # Flight control members
-        self.flight_control = VesselFlightControl(False, 0.0)
+        self.flight_control = VesselFlightControl(False, 0.0, 0.0, 0.0)
         self.flight_controller = FlightController()
         self.flight_control_lock = threading.Lock()
         self.flight_control_program = "manual"
@@ -102,6 +102,7 @@ class KmiffedApp(App):
         # store frequently used widgets
         self.panel_orbital_parameters = self.query_one("#panel-orbital", PanelOrbitalParameters)
         self.panel_supplies = self.query_one("#panel-supplies", PanelSupplies)
+        self.panel_control_program = self.query_one("#panel-program", PanelControlProgram)
         self.panels = self.query("#main-container > .panel")
 
         # update selected panel style
@@ -149,6 +150,12 @@ class KmiffedApp(App):
 
         elif event.key == 'enter':
             self.panels[self.selected_panel_idx].on_panel_key_select()
+
+        elif event.key == 'r':
+            self.panels[self.selected_panel_idx].on_panel_key_increment()
+
+        elif event.key == 'f':
+            self.panels[self.selected_panel_idx].on_panel_key_decrement()
 
     def on_unmount(self) -> None:
         self.is_krpc_terminated = True
@@ -232,16 +239,12 @@ class KmiffedApp(App):
 
             # Execute flight controller
             vessel_flight_state = self.krpc.get_vessel_flight_state()
-            print("\n\n vessel_flight_state: valid={0} Tmax={1} wght={2}".format(
-                vessel_flight_state.bIsDataValid, vessel_flight_state.fThrustMax, vessel_flight_state.fWeight))
             (flight_ctrl_pgm, flight_ctrl_pgm_data) = self._get_flight_control_program()
-            print("\n\n flight_ctrl_pgm: pgm={0} dat={1}".format(flight_ctrl_pgm, flight_ctrl_pgm_data))
             if vessel_flight_state.bIsDataValid:
                 self.flight_control = self.flight_controller.execute(
                     flight_ctrl_pgm,
                     flight_ctrl_pgm_data,
                     vessel_flight_state)
-                print("\n\n flight_control: use={0} throttle={1}".format(self.flight_control.bIsInputValid, self.flight_control.fThrottle))
             else:
                 self.flight_control.bIsInputValid = False
             if self.flight_control.bIsInputValid:
@@ -255,7 +258,15 @@ class KmiffedApp(App):
                     orbital_params.fPeriod,
                     orbital_params.fTimeToApoapsis,
                     orbital_params.fTimeToPeriapsis,
-                    vessel_flight_state.fVerticalSpeed))
+                    vessel_flight_state.fVerticalSpeed,
+                    vessel_flight_state.fForwardSpeed,
+                    vessel_flight_state.fLateralSpeed,
+                    vessel_flight_state.fPitchSpeed,
+                    vessel_flight_state.fPitchTorqueMax,
+                    vessel_flight_state.fPitchMomentOfInertia,
+                    vessel_flight_state.fYawSpeed,
+                    vessel_flight_state.fYawTorqueMax,
+                    vessel_flight_state.fYawMomentOfInertia))
 
             # Sleep till next frame
             time.sleep(self.__KRPC_MONITOR_THREAD_INTERVAL_S)

@@ -1,2 +1,3 @@
 krpc==0.5.3
+numpy==1.25.1
 textual==0.29.0

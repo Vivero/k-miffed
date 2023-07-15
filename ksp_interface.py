@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
-import krpc
+import krpc, math
+import numpy as np
 from ksp_types import VesselAttitude, VesselFlightControl, VesselFlightState, VesselOrbitalParameters, VesselResources
+from pyquaternion import Quaternion
+from util import project_a_onto_b, project_vector_a_onto_plane_b, vector_normalize
 
 class KspInterface:
     #
@@ -92,13 +95,26 @@ class KspInterface:
             self.stream_roll = self.krpc_connection.add_stream(getattr, vessel_flight, 'roll')
 
             # Vessel flight state
+            self.stream_situation = self.krpc_connection.add_stream(getattr, vessel, 'situation')
             self.stream_max_thrust = self.krpc_connection.add_stream(getattr, vessel, 'max_thrust')
             self.stream_mass = self.krpc_connection.add_stream(getattr, vessel, 'mass')
+            self.stream_max_torque = self.krpc_connection.add_stream(getattr, vessel, 'available_torque')
+            self.stream_moi = self.krpc_connection.add_stream(getattr, vessel, 'moment_of_inertia')
 
             # Vessel's orbital parameters
             # self.stream_orbital_period = self.krpc_connection.add_stream(getattr, vessel.orbit, 'period')
             # self.stream_time_to_apoapsis = self.krpc_connection.add_stream(getattr, vessel.orbit, 'time_to_apoapsis')
             # self.stream_time_to_periapsis = self.krpc_connection.add_stream(getattr, vessel.orbit, 'time_to_periapsis')
+
+            # Visual debugging markers
+            self.draw_vessel_pos_unit = self.krpc_connection.drawing.add_line((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), self.stream_vessel_orbit().body.reference_frame)
+            self.draw_vessel_pos_unit.color = (0.0, 1.0, 0.0)
+            self.draw_vessel_vel_unit = self.krpc_connection.drawing.add_line((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), self.stream_vessel_orbit().body.reference_frame)
+            self.draw_vessel_vel_unit.color = (0.0, 0.0, 1.0)
+            self.draw_vessel_srfvel_unit = self.krpc_connection.drawing.add_line((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), self.stream_vessel_orbit().body.reference_frame)
+            self.draw_vessel_srfvel_unit.color = (1.0, 0.0, 0.0)
+            self.draw_vessel_fwd_unit = self.krpc_connection.drawing.add_line((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), self.stream_vessel_orbit().body.reference_frame)
+            self.draw_vessel_fwd_unit.color = (1.0, 0.6, 0.1)
 
             self.is_data_streaming = True
             self.retry_interval_ms = 100
@@ -153,21 +169,70 @@ class KspInterface:
                 print("Exception message : ", str(e))
                 self.is_data_streaming = False
         return VesselAttitude(is_valid, heading, pitch, roll)
-    
+
     def get_vessel_flight_state(self) -> VesselFlightState:
-        data = VesselFlightState(False, 0.0, 0.0, 0.0)
+        data = VesselFlightState(False, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         if self.is_connected and self.is_data_streaming:
             try:
                 vessel = self.krpc_connection.space_center.active_vessel
                 vessel_mass = self.stream_mass()
-                vessel_pos = vessel.position(self.stream_vessel_orbit().body.reference_frame)
-                dist_sq = (vessel_pos[0] * vessel_pos[0]) + (vessel_pos[1] * vessel_pos[1]) + (vessel_pos[2] * vessel_pos[2])
-                cbody_gravity = self.gravitational_constant * vessel.orbit.body.mass / dist_sq
-                print("\n\n flight_state: mass={0} dist={1} g={2}".format(vessel_mass, dist_sq, cbody_gravity))
+                vessel_cbody_refframe = self.stream_vessel_orbit().body.reference_frame
+                vessel_pos = vessel.position(vessel_cbody_refframe)
+                vessel_pos_vec = np.array([vessel_pos[0], vessel_pos[1], vessel_pos[2]])
+                vessel_pos_mag2 = np.dot(vessel_pos_vec, vessel_pos_vec)
+                vessel_pos_mag = math.sqrt(vessel_pos_mag2)
+                vessel_pos_unit = vessel_pos_vec / vessel_pos_mag
+                vessel_vel = vessel.velocity(vessel_cbody_refframe)
+                vessel_vel_vec = np.array([vessel_vel[0], vessel_vel[1], vessel_vel[2]])
+                vessel_vel_mag2 = np.dot(vessel_vel_vec, vessel_vel_vec)
+                vessel_vel_mag = math.sqrt(vessel_vel_mag2)
+                vessel_vel_unit = np.array([vessel_vel[0] / vessel_vel_mag, vessel_vel[1] / vessel_vel_mag, vessel_vel[2] / vessel_vel_mag])
+                cbody_gravity = self.gravitational_constant * vessel.orbit.body.mass / vessel_pos_mag2
 
+                vessel_srfvel_vec = project_vector_a_onto_plane_b(vessel_vel_vec, vessel_pos_unit)
+                vessel_srfvel_mag2 = np.dot(vessel_srfvel_vec, vessel_srfvel_vec)
+                vessel_srfvel_mag = math.sqrt(vessel_srfvel_mag2)
+                vessel_srfvel_unit = vessel_srfvel_vec / vessel_srfvel_mag
+
+                vessel_rot = vessel.rotation(vessel_cbody_refframe)
+                vessel_rot_q = Quaternion(vessel_rot[3], vessel_rot[0], vessel_rot[1], vessel_rot[2])
+                vessel_fwd = vessel_rot_q.rotate(np.array([0.0, 0.0, 1.0]))
+                vessel_lat = vessel_rot_q.rotate(np.array([1.0, 0.0, 0.0]))
+
+                surface_vessel_fwd = project_vector_a_onto_plane_b(vessel_fwd, vessel_pos_unit)
+                surface_vessel_fwd = vector_normalize(surface_vessel_fwd)
+                surface_vessel_lat = project_vector_a_onto_plane_b(vessel_lat, vessel_pos_unit)
+                surface_vessel_lat = vector_normalize(surface_vessel_lat)
+
+                surface_vessel_vel_fwd = project_a_onto_b(vessel_vel_vec, surface_vessel_fwd)
+                surface_vessel_vel_lat = project_a_onto_b(vessel_vel_vec, surface_vessel_lat)
+
+                vessel_ang_vel = vessel.angular_velocity(vessel_cbody_refframe)
+                vessel_ang_vel_vec = np.array([vessel_ang_vel[0], vessel_ang_vel[1], vessel_ang_vel[2]])
+                vessel_ang_vel_pitch = project_a_onto_b(vessel_ang_vel_vec, vessel_lat)
+                vessel_ang_vel_yaw = project_a_onto_b(vessel_ang_vel_vec, vessel_fwd)
+
+                self.draw_vessel_pos_unit.start = vessel_pos
+                self.draw_vessel_pos_unit.end = vessel_pos_vec + (vessel_pos_unit * 10.0)
+                self.draw_vessel_vel_unit.start = vessel_pos
+                self.draw_vessel_vel_unit.end = vessel_pos + (vessel_vel_unit * 10.0)
+                self.draw_vessel_srfvel_unit.start = vessel_pos
+                self.draw_vessel_srfvel_unit.end = vessel_pos + (vessel_srfvel_unit * 10.0)
+                self.draw_vessel_fwd_unit.start = vessel_pos
+                self.draw_vessel_fwd_unit.end = vessel_pos + (surface_vessel_vel_lat * 10.0)
+
+                data.iSituation = self.stream_situation()
+                data.fWeight = cbody_gravity * vessel_mass
                 data.fThrustMax = self.stream_max_thrust()
                 data.fVerticalSpeed = vessel.flight(self.stream_vessel_orbit().body.reference_frame).vertical_speed
-                data.fWeight = cbody_gravity * vessel_mass
+                data.fForwardSpeed = math.sqrt(np.dot(surface_vessel_vel_fwd, surface_vessel_vel_fwd)) * np.sign(np.dot(surface_vessel_vel_fwd, surface_vessel_fwd))
+                data.fLateralSpeed = math.sqrt(np.dot(surface_vessel_vel_lat, surface_vessel_vel_lat)) * np.sign(np.dot(surface_vessel_vel_lat, surface_vessel_lat))
+                data.fPitchSpeed = math.sqrt(np.dot(vessel_ang_vel_pitch, vessel_ang_vel_pitch)) * np.sign(np.dot(vessel_ang_vel_pitch, surface_vessel_lat))
+                data.fPitchTorqueMax = self.stream_max_torque()[0][0]
+                data.fPitchMomentOfInertia = self.stream_moi()[0]
+                data.fYawSpeed = math.sqrt(np.dot(vessel_ang_vel_yaw, vessel_ang_vel_yaw)) * np.sign(np.dot(vessel_ang_vel_yaw, surface_vessel_fwd))
+                data.fYawTorqueMax = self.stream_max_torque()[0][1]
+                data.fYawMomentOfInertia = self.stream_moi()[1]
                 data.bIsDataValid = True
             except Exception as e:
                 print("Failed to get KRPC vessel flight state")
@@ -222,6 +287,8 @@ class KspInterface:
     def set_flight_controls(self, control: VesselFlightControl) -> None:
         if control.bIsInputValid:
             self.krpc_connection.space_center.active_vessel.control.throttle = control.fThrottle
+            self.krpc_connection.space_center.active_vessel.control.pitch = control.fPitch
+            self.krpc_connection.space_center.active_vessel.control.yaw = control.fYaw
 
     #
     # Private Methods

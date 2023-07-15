@@ -29,8 +29,9 @@ class PanelControlProgram(KMiffedPanel):
         self.programs = [
             "manual",
             "vspeed",
-            "altitude",
+            "attitude",
         ]
+        self.program_data = 0.0
         super().__init__("Program", classes=classes, id=id)
 
     #
@@ -39,7 +40,8 @@ class PanelControlProgram(KMiffedPanel):
     def compose(self) -> ComposeResult:
         yield Label("Manual", classes="item-label")
         yield Label("Maintain VSpeed", classes="item-label")
-        yield Label("Maintain Altitude", classes="item-label")
+        yield Label("Maintain Attitude", classes="item-label")
+        yield Label("Program Data", id="item-program-data")
 
     def set_data(self) -> None:
         pass
@@ -75,13 +77,23 @@ class PanelControlProgram(KMiffedPanel):
         self.selected_item_idx = self.hovered_item_idx
         self._update_items()
 
-        # self.post_message(self.SetControlProgramMsg(self.programs[self.selected_item_idx], 10.0))
-        if self.selected_item_idx == 0:
-            self.post_message(self.SetControlProgramMsg("manual", 0.0))
-        elif self.selected_item_idx == 1:
-            self.post_message(self.SetControlProgramMsg("vspeed", 5.0))
-        elif self.selected_item_idx == 2:
-            self.post_message(self.SetControlProgramMsg("vspeed", -3.0))
+        self.post_message(self.SetControlProgramMsg(self.programs[self.selected_item_idx], self.program_data))
+        # if self.selected_item_idx == 0:
+        #     self.post_message(self.SetControlProgramMsg("manual", 0.0))
+        # elif self.selected_item_idx == 1:
+        #     self.post_message(self.SetControlProgramMsg("vspeed", 0.0))
+        # elif self.selected_item_idx == 2:
+        #     self.post_message(self.SetControlProgramMsg("attitude", 0.0))
+
+    def on_panel_key_decrement(self) -> None:
+        self.program_data -= 1.0
+        self._update_items()
+        self.post_message(self.SetControlProgramMsg(self.programs[self.selected_item_idx], self.program_data))
+
+    def on_panel_key_increment(self) -> None:
+        self.program_data += 1.0
+        self._update_items()
+        self.post_message(self.SetControlProgramMsg(self.programs[self.selected_item_idx], self.program_data))
 
     #
     # Event Handlers
@@ -113,3 +125,5 @@ class PanelControlProgram(KMiffedPanel):
                 item.remove_class("item-label-selected")
                 item.remove_class("item-label-hovered")
             item_idx += 1
+
+        self.query_one("#item-program-data").update("Program Data = {:.2f}".format(self.program_data))
